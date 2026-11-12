@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Évaluation de réunion</title>
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--tx:#1f1e1d;--tx2:#5f5e5a;--bd:#e0ded6;--ac:#185fa5;--acbg:#e6f1fb}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:20px 14px 60px}
+h1{font-size:24px;font-weight:600;margin:0 0 6px}
+.intro{color:var(--tx2);font-size:14px;margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px 18px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.num{width:28px;height:28px;border-radius:50%;background:var(--acbg);color:var(--ac);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;flex:none}
+h2{font-size:18px;font-weight:600;margin:0}
+.q{font-size:14px;font-weight:500;margin:14px 0 6px}
+.q small{color:var(--tx2);font-weight:400}
+.row{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:7px 13px;border:1px solid var(--bd);border-radius:20px;background:var(--card);color:var(--tx);font:inherit;font-size:14px;cursor:pointer;user-select:none}
+.chip:hover{border-color:var(--ac)}
+.chip.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.scale .chip{width:40px;padding:7px 0;text-align:center;border-radius:10px}
+.ends{display:flex;justify-content:space-between;font-size:12px;color:var(--tx2);margin-top:3px;max-width:430px}
+textarea{width:100%;font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--bd);border-radius:10px;margin-top:14px;resize:vertical;min-height:50px;background:var(--bg);color:var(--tx)}
+#send{margin-top:8px;width:100%;padding:13px;font:inherit;font-size:16px;font-weight:600;border:none;border-radius:12px;background:var(--ac);color:#fff;cursor:pointer}
+#send:disabled{opacity:.5;cursor:default}
+.err{color:#791f1f;background:#fcebeb;border-radius:10px;padding:10px 14px;font-size:14px;margin:10px 0}
+.done{text-align:center;padding:50px 10px}
+.done h2{font-size:22px;margin-bottom:8px}
+.again{margin-top:14px;padding:9px 18px;font:inherit;border:1px solid var(--bd);background:var(--card);border-radius:10px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="main">
+    <h1 id="title"></h1>
+    <p class="intro">Pour chaque point, indiquez si vous vous sentez concerné(e), notez l'intérêt du point et la qualité de sa présentation (1 = faible, 10 = élevé), puis son utilité. Vos réponses sont anonymes. Laissez de côté un point que vous ne souhaitez pas évaluer.</p>
+    <div id="form"></div>
+    <div id="err" class="err" hidden></div>
+    <button id="send">Envoyer mes réponses</button>
+  </div>
+  <div id="ok" class="done" hidden>
+    <h2>Merci pour votre réponse !</h2>
+    <p class="intro">Vos évaluations ont bien été enregistrées.</p>
+    <button class="again" id="again">Remplir une nouvelle réponse</button>
+  </div>
+</div>
+
+<script>
+/* ===== À MODIFIER ===== */
+var TITLE="Réunion d'équipe du 9 novembre";
+var POINTS=["Bilan du trimestre","Lancement du nouveau projet","Organisation interne","Budget de l'année prochaine"];
+var TABLE="Reponses";          // nom de la table dans Grist
+var NUMBERS_AS_TEXT=false;     // true si Interet/Qualite sont de type Choix
+/* ====================== */
+var CONC=["Oui","En partie","Non"];
+var USES=["Informer","Décider","Consulter","Planifier","Évaluer","Co-construire"];
+var ST={};
+
+grist.ready({requiredAccess:'full'});
+
+function $(id){return document.getElementById(id)}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+
+function reset(){
+  ST={};
+  POINTS.forEach(function(p,i){ST[i]={n:null,v:null,q:null,u:[]}});
+  render();
+}
+function scale(i,k){
+  var h='<div class="row scale">';
+  for(var n=1;n<=10;n++)h+='<button type="button" class="chip'+(ST[i][k]===n?' on':'')+'" data-i="'+i+'" data-k="'+k+'" data-val="'+n+'">'+n+'</button>';
+  return h+'</div><div class="ends"><span>Faible</span><span>Élevé</span></div>';
+}
+function render(){
+  $('title').textContent=TITLE;
+  var h='';
+  POINTS.forEach(function(p,i){
+    h+='<div class="card"><div class="head"><span class="num">'+(i+1)+'</span><h2>'+esc(p)+'</h2></div>';
+    h+='<p class="q">Vous sentez-vous concerné(e) ?</p><div class="row">';
+    CONC.forEach(function(c){h+='<button type="button" class="chip'+(ST[i].n===c?' on':'')+'" data-i="'+i+'" data-k="n" data-val="'+esc(c)+'">'+c+'</button>'});
+    h+='</div><p class="q">Intérêt du point à l\'ordre du jour</p>'+scale(i,'v');
+    h+='<p class="q">Qualité de la présentation</p>'+scale(i,'q');
+    h+='<p class="q">Utilité du point <small>(plusieurs choix possibles)</small></p><div class="row">';
+    USES.forEach(function(u){h+='<button type="button" class="chip'+(ST[i].u.indexOf(u)>=0?' on':'')+'" data-i="'+i+'" data-k="u" data-val="'+esc(u)+'">'+u+'</button>'});
+    h+='</div><textarea id="c'+i+'" maxlength="300" placeholder="Commentaire facultatif sur ce point"></textarea></div>';
+  });
+  /* on conserve les commentaires déjà tapés */
+  var old=window._com||{};
+  $('form').innerHTML=h;
+  POINTS.forEach(function(p,i){if(old[i])$('c'+i).value=old[i]});
+}
+function keepComments(){
+  window._com={};
+  POINTS.forEach(function(p,i){var t=$('c'+i);if(t)window._com[i]=t.value});
+}
+$('form').addEventListener('click',function(e){
+  var b=e.target.closest('button.chip');if(!b)return;
+  var i=+b.getAttribute('data-i'),k=b.getAttribute('data-k'),val=b.getAttribute('data-val');
+  keepComments();
+  if(k==='u'){var j=ST[i].u.indexOf(val);if(j>=0)ST[i].u.splice(j,1);else ST[i].u.push(val)}
+  else if(k==='n'){ST[i].n=(ST[i].n===val)?null:val}
+  else{ST[i][k]=+val}
+  render();
+});
+
+$('send').onclick=function(){
+  var err=$('err'),recs=[],bad=[];
+  err.hidden=true;
+  POINTS.forEach(function(p,i){
+    var s=ST[i],t=$('c'+i).value.trim();
+    var any=s.n||s.v||s.q||s.u.length||t;
+    if(!any)return;
+    if(!s.v||!s.q){bad.push(i+1);return}
+    var f={Point:p,Interet:NUMBERS_AS_TEXT?String(s.v):s.v,Qualite:NUMBERS_AS_TEXT?String(s.q):s.q};
+    if(s.n)f.Concerne=s.n;
+    if(s.u.length)f.Utilite=['L'].concat(s.u);
+    if(t)f.Commentaire=t;
+    recs.push({fields:f});
+  });
+  if(bad.length){err.textContent='Veuillez noter l\'intérêt et la qualité pour le point '+bad.join(', ')+' (ou le vider entièrement).';err.hidden=false;return}
+  if(!recs.length){err.textContent='Évaluez au moins un point avant d\'envoyer.';err.hidden=false;return}
+  $('send').disabled=true;
+  grist.getTable(TABLE).create(recs).then(function(){
+    $('main').hidden=true;$('ok').hidden=false;$('send').disabled=false;
+  }).catch(function(e){
+    err.textContent='L\'envoi a échoué : '+(e&&e.message?e.message:e);err.hidden=false;$('send').disabled=false;
+  });
+};
+$('again').onclick=function(){window._com={};reset();$('ok').hidden=true;$('main').hidden=false;window.scrollTo(0,0)};
+
+reset();
+</script>
+</body>
+</html>
