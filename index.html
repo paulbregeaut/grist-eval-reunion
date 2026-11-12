@@ -51,6 +51,7 @@ svg .ax{fill:var(--tx2);font-size:12px}
     <div class="m"><small>Score global</small><b id="mS">–</b></div>
     <div class="m"><small>Se sentent concernés</small><b id="mC">–</b></div>
   </div>
+  <select id="selR" style="font:inherit;padding:5px 8px;margin-top:8px"></select>
   <div id="tabs" class="tabs"></div>
   <div class="card">
     <div id="grid"></div>
@@ -73,7 +74,8 @@ grist.ready({
     {name:'qualite',title:'Qualité',type:'Numeric,Int'},
     {name:'concerne',title:'Concerné(e)',type:'Any',optional:true},
     {name:'utilite',title:'Utilité',type:'Any',optional:true},
-    {name:'commentaire',title:'Commentaire',type:'Any',optional:true}
+    {name:'commentaire',title:'Commentaire',type:'Any',optional:true},
+    {name:'reunion',title:'Réunion',type:'Any',optional:true}
   ]
 });
 
@@ -113,6 +115,17 @@ function normUses(x){
 }
 
 /* ---------- Réception des données ---------- */
+var ALL=[];
+function applyFilter(){
+  var sel=$('selR').value;
+  ROWS=ALL.filter(function(r){return !sel||r.m===sel});
+  POINTS=[];
+  ROWS.forEach(function(r){if(POINTS.indexOf(r.p)<0)POINTS.push(r.p)});
+  tabSel=-1;
+  render();
+}
+$('selR').onchange=applyFilter;
+
 grist.onRecords(function(records){
   var mapped=grist.mapColumnNames(records);
   if(!mapped){
@@ -121,16 +134,22 @@ grist.onRecords(function(records){
     $('app').hidden=true;
     return;
   }
-  ROWS=mapped.filter(function(r){
+  ALL=mapped.filter(function(r){
     return r.point!=null&&String(r.point).trim()!==''&&isNum(r.interet)&&isNum(r.qualite);
   }).map(function(r){
     return{p:String(r.point).trim(),v:+r.interet,q:+r.qualite,
-           n:normConc(r.concerne),u:normUses(r.utilite),c:r.commentaire?String(r.commentaire):''};
+           n:normConc(r.concerne),u:normUses(r.utilite),
+           c:r.commentaire?String(r.commentaire):'',
+           m:r.reunion?String(r.reunion):''};
   });
-  POINTS=[];
-  ROWS.forEach(function(r){if(POINTS.indexOf(r.p)<0)POINTS.push(r.p)});
+  var meets=[];
+  ALL.forEach(function(r){if(r.m&&meets.indexOf(r.m)<0)meets.push(r.m)});
+  var sel=$('selR'),cur=sel.value;
+  sel.innerHTML='<option value="">Toutes les réunions</option>'+
+    meets.map(function(m){return'<option value="'+esc(m)+'">'+esc(m)+'</option>'}).join('');
+  sel.value=meets.indexOf(cur)>=0?cur:(meets.length?meets[meets.length-1]:'');
   $('msg').hidden=true;$('app').hidden=false;
-  render();
+  applyFilter();
 });
 
 /* ---------- Statistiques ---------- */
