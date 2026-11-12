@@ -51,10 +51,9 @@ textarea{width:100%;font:inherit;font-size:14px;padding:9px 10px;border:1px soli
 
 <script>
 /* ===== À MODIFIER ===== */
-var TITLE="Réunion d'équipe du 9 novembre";
-var POINTS=["Bilan du trimestre","Lancement du nouveau projet","Organisation interne","Budget de l'année prochaine"];
-var TABLE="Table1";          // nom de la table dans Grist
-var NUMBERS_AS_TEXT=false;     // true si Interet/Qualite sont de type Choix
+var TITLE="", POINTS=[], MEETING="";
+var TABLE="Table1";
+var NUMBERS_AS_TEXT=false;
 /* ====================== */
 var CONC=["Oui","En partie","Non"];
 var USES=["Informer","Décider","Consulter","Planifier","Évaluer","Co-construire"];
@@ -62,6 +61,25 @@ var ST={};
 
 grist.ready({requiredAccess:'full'});
 
+function loadMeeting(){
+  return Promise.all([
+    grist.docApi.fetchTable('Reunions'),
+    grist.docApi.fetchTable('Points')
+  ]).then(function(res){
+    var R=res[0],P=res[1],idx=-1;
+    for(var i=0;i<R.id.length;i++) if(R.Active[i]) idx=i;
+    if(idx<0) throw new Error("Aucune réunion active.");
+    var rid=R.id[idx], list=[];
+    MEETING=R.Titre[idx]; TITLE=MEETING;
+    for(var j=0;j<P.id.length;j++){
+      if(P.Reunion[j]===rid && P.Intitule[j]) list.push({o:P.Ordre[j]||0,t:P.Intitule[j]});
+    }
+    list.sort(function(a,b){return a.o-b.o});
+    POINTS=list.map(function(x){return x.t});
+    if(!POINTS.length) throw new Error("Aucun point pour la réunion active.");
+  });
+}
+  
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 
@@ -116,6 +134,7 @@ $('send').onclick=function(){
     if(!any)return;
     if(!s.v||!s.q){bad.push(i+1);return}
     var f={Point:p,Interet:NUMBERS_AS_TEXT?String(s.v):s.v,Qualite:NUMBERS_AS_TEXT?String(s.q):s.q};
+    f.Reunion=MEETING;
     if(s.n)f.Concerne=s.n;
     if(s.u.length)f.Utilite=['L'].concat(s.u);
     if(t)f.Commentaire=t;
@@ -132,7 +151,12 @@ $('send').onclick=function(){
 };
 $('again').onclick=function(){window._com={};reset();$('ok').hidden=true;$('main').hidden=false;window.scrollTo(0,0)};
 
-reset();
+  loadMeeting().then(reset).catch(function(e){
+  $('err').textContent=(e&&e.message?e.message:e);
+  $('err').hidden=false;
+  $('send').disabled=true;
+});
+  
 </script>
 </body>
 </html>
